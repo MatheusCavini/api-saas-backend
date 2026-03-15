@@ -1,6 +1,7 @@
 """Utility helpers for black-box E2E tests."""
 import os
 from typing import Any, Optional
+import jwt
 
 import requests
 
@@ -13,9 +14,15 @@ class TestUtils:
         path = endpoint if endpoint.startswith("/") else f"/{endpoint}"
         url = f"{base_url}{path}"
         request_headers = headers.copy() if headers else {}
-        print("Using headers: "+ str(request_headers))
 
         if payload is None:
             return requests.request(method, url, headers=request_headers, **kwargs)
 
         return requests.request(method, url, json=payload, headers=request_headers, **kwargs)
+
+    def decode_token(token: str) -> dict:
+        return jwt.decode(
+            token,
+            os.environ.get("JWT_SECRET", "test-secret"),
+            algorithms=[os.environ.get("JWT_ALGORITHM", "HS256")],
+        )
