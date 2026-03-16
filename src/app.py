@@ -16,9 +16,9 @@ import models
 
 
 from resources.health_check import HealthCheckResource
-from resources.sample_entity import SampleEntityResource
 from resources.auth_resource import AuthResource
 from resources.workspace import WorkspaceResource
+from resources.user import UserResource
 
 
 
@@ -59,9 +59,9 @@ def create():
     workspace_resource = WorkspaceResource()
     api.add_route("/app/workspace", workspace_resource)
 
-    sample_entity_resource = SampleEntityResource()
-    api.add_route("/api/v1/sample_entities", sample_entity_resource)
-    api.add_route("/api/v1/sample_entities/{entity_id}", sample_entity_resource)
+    user_resource = UserResource()
+    api.add_route("/app/user/me", user_resource)
+
 
     api.add_error_handler(ClientException, handle_client_error)
     api.add_error_handler(Exception, handle_unexpected_error)
