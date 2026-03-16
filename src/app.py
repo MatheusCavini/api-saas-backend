@@ -2,19 +2,24 @@ import falcon
 import logging
 import sys
 
-from resources import auth_resource
-from utils.bracket_formatter import BracketFormatter
+
 from middlewares.cors import CorsMiddleware
 from middlewares.db_session import SQLAlchemySessionManager
 from middlewares.rate_limiter import RateLimiterMiddleware
 from middlewares.authentication import AuthenticationMiddleware
 from middlewares.logger import Logger
+
 from database.db import SessionLocal
+from utils.bracket_formatter import BracketFormatter
+from exception import ClientException, handle_client_error, handle_unexpected_error
+import models
+
+
 from resources.health_check import HealthCheckResource
 from resources.sample_entity import SampleEntityResource
 from resources.auth_resource import AuthResource
-from exception import ClientException, handle_client_error, handle_unexpected_error
-import models
+from resources.workspace import WorkspaceResource
+
 
 
 def configure_logging():
@@ -47,9 +52,12 @@ def create():
     api.add_route("/health", health_check_resource)
 
     auth_resource = AuthResource()
-    api.add_route("/api/v1/auth/register", auth_resource, suffix="register")
-    api.add_route("/api/v1/auth/login", auth_resource, suffix="login")
-    api.add_route("/api/v1/auth/oauth/google", auth_resource, suffix="oauth_google")
+    api.add_route("/auth/register", auth_resource, suffix="register")
+    api.add_route("/auth/login", auth_resource, suffix="login")
+    api.add_route("/auth/oauth/google", auth_resource, suffix="oauth_google")
+
+    workspace_resource = WorkspaceResource()
+    api.add_route("/app/workspace", workspace_resource)
 
     sample_entity_resource = SampleEntityResource()
     api.add_route("/api/v1/sample_entities", sample_entity_resource)

@@ -31,6 +31,10 @@ class Workspace(Base):
         server_default=func.now(),
         nullable=False,
     )
+    deactivated_on: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
 
     members: Mapped[list["WorkspaceMember"]] = relationship(back_populates="workspace")
     subscriptions: Mapped[list["Subscription"]] = relationship(back_populates="workspace")

@@ -54,7 +54,8 @@ CREATE TABLE workspaces (
     workspace_key UUID UNIQUE NOT NULL DEFAULT uuid_generate_v4(),
     name VARCHAR(255) NOT NULL,
     stripe_customer_id VARCHAR(255) UNIQUE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    deactivated_on TIMESTAMP WITH TIME ZONE
 );
 CREATE INDEX idx_workspaces_workspace_key ON workspaces(workspace_key);
 

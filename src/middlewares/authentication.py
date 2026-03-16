@@ -17,7 +17,7 @@ class AuthenticationMiddleware:
             return
 
         path = getattr(req, "path", "") or ""
-        if path == "/health" or not path.startswith("/api/v1/"):
+        if path == "/health":
             return
 
         auth_header = req.get_header("Authorization")

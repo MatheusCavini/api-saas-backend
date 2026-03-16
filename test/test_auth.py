@@ -20,7 +20,7 @@ _REGISTER_NAME = "Auth Tester"
 def test_register():
     """Validate register happy path, duplicate email, and missing fields."""
     payload = {"name": _REGISTER_NAME, "email": _REGISTER_EMAIL, "password": _REGISTER_PASSWORD}
-    response = TestUtils.make_request("POST", "/api/v1/auth/register", payload=payload)
+    response = TestUtils.make_request("POST", "/auth/register", payload=payload)
     assert response.status_code == 201
     body = response.json()
     assert "access_token" in body
@@ -28,13 +28,13 @@ def test_register():
     assert "user_key" in body
     yield
 
-    response = TestUtils.make_request("POST", "/api/v1/auth/register", payload=payload)
+    response = TestUtils.make_request("POST", "/auth/register", payload=payload)
     assert response.status_code == 409
     yield
 
-    response = TestUtils.make_request("POST", "/api/v1/auth/register", payload={"email": _REGISTER_EMAIL})
+    response = TestUtils.make_request("POST", "/auth/register", payload={"email": _REGISTER_EMAIL})
     assert response.status_code == 400
-    response = TestUtils.make_request("POST", "/api/v1/auth/register", payload={"password": _REGISTER_PASSWORD})
+    response = TestUtils.make_request("POST", "/auth/register", payload={"password": _REGISTER_PASSWORD})
     assert response.status_code == 400
     yield
 
@@ -43,12 +43,12 @@ def test_register():
 def test_login():
     """Validate login happy path and error cases."""
     payload = {"name": _REGISTER_NAME, "email": _REGISTER_EMAIL, "password": _REGISTER_PASSWORD}
-    response = TestUtils.make_request("POST", "/api/v1/auth/register", payload=payload)
+    response = TestUtils.make_request("POST", "/auth/register", payload=payload)
     assert response.status_code in (201, 409)
 
     response = TestUtils.make_request(
         "POST",
-        "/api/v1/auth/login",
+        "/auth/login",
         payload={"email": _REGISTER_EMAIL, "password": _REGISTER_PASSWORD},
     )
     assert response.status_code == 200
@@ -64,7 +64,7 @@ def test_login():
 
     response = TestUtils.make_request(
         "POST",
-        "/api/v1/auth/login",
+        "/auth/login",
         payload={"email": _REGISTER_EMAIL, "password": "WrongPass!123"},
     )
     assert response.status_code == 401
@@ -72,7 +72,7 @@ def test_login():
 
     response = TestUtils.make_request(
         "POST",
-        "/api/v1/auth/login",
+        "/auth/login",
         payload={"email": f"missing-{uuid4().hex}@test.local", "password": _REGISTER_PASSWORD},
     )
     assert response.status_code == 401
