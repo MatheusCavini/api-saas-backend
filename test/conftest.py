@@ -11,3 +11,7 @@ os.environ.setdefault("AUTH_BEARER_TOKEN", "dev-token")
 def auth_headers():
     """Default Bearer token for tests."""
     return {"Authorization": "Bearer " + os.environ.get("AUTH_BEARER_TOKEN", "dev-token")}
+    
+@pytest.fixture
+def admin_headers():
+    return {"X-Admin-Token": os.environ.get("ADMIN_SECRET_KEY", "sample-admin-key") }
