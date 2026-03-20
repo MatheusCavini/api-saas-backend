@@ -33,6 +33,7 @@ services:
       REDIS_URL: redis://redis:6379
       AUTH_BEARER_TOKEN: ${AUTH_BEARER_TOKEN:-dev-token}
       JWT_SECRET: ${JWT_SECRET:-test-secret}
+      ADMIN_SECRET_KEY: sample-admin-key
     ports:
       - "8000:8000"
     depends_on:

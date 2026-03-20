@@ -5,7 +5,7 @@ from uuid import UUID
 import jwt
 from sqlalchemy.orm import Session
 
-from exception import NotAuthorizedException, ServiceUnavailableException
+from exception import NotAuthorizedException, ServiceUnavailableException, ForbiddenException
 from models.user import User
 
 logger = logging.getLogger(__name__)
@@ -16,10 +16,33 @@ class AuthenticationMiddleware:
         if resource is not None and getattr(resource, "auth_required", True) is False:
             return
 
+        # Public Endpoints
         path = getattr(req, "path", "") or ""
         if path == "/health":
             return
 
+        # Protected Admin endpoints
+        is_admin_resource = getattr(resource, "admin_required", False)
+        if is_admin_resource:
+            expected_secret = os.environ.get("ADMIN_SECRET_KEY", "").strip()
+            if not expected_secret:
+                raise ServiceUnavailableException(
+                    title="Service Unavailable",
+                    description="Admin secret key is not configured on the server."
+                )
+
+            provided_token = req.get_header("X-Admin-Token")
+            
+            if not provided_token or provided_token != expected_secret:
+                raise ForbiddenException(
+                    title="Forbidden",
+                    description="Missing or invalid Authorization header."
+                )
+            
+            return
+
+
+        # Protected User endpoints
         auth_header = req.get_header("Authorization")
         if not auth_header or not auth_header.startswith("Bearer "):
             raise NotAuthorizedException(
