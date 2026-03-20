@@ -9,27 +9,11 @@ from pytest_steps import test_steps
 from test.utils import TestUtils
 
 
-os.environ.setdefault("JWT_SECRET", "test-secret")
-os.environ.setdefault("JWT_ALGORITHM", "HS256")
-
-
-def _register_and_login(email: str, password: str, name: str) -> dict:
-    unique_name = f"{name}-{uuid4().hex}"
-    payload = {"name": unique_name, "email": email, "password": password}
-    response = TestUtils.make_request("POST", "/auth/register", payload=payload)
-    assert response.status_code in (201, 409)
-
-    response = TestUtils.make_request("POST", "/auth/login", payload={"email": email, "password": password})
-    assert response.status_code == 200
-    body = response.json()
-    return {"Authorization": f"Bearer {body['access_token']}"}
-
-
 @test_steps("test_create_invalid", "test_create_valid", "test_list_member")
 def test_workspace_create_and_list():
     """Validate workspace create schema and member list behavior."""
     email = f"workspace.{uuid4().hex}@test.com"
-    headers = _register_and_login(email, "Passw0rd!123", "Workspace Owner")
+    headers = TestUtils.register_and_login(email, "Passw0rd!123", "Workspace Owner")
 
     response = TestUtils.make_request("POST", "/app/workspace", payload={"wrong": "data"}, headers=headers)
     assert response.status_code == 400
@@ -56,7 +40,7 @@ def test_workspace_create_and_list():
 def test_workspace_update_owner():
     """Owner can update workspace name; missing name is rejected."""
     email = f"workspace.update.{uuid4().hex}@test.com"
-    headers = _register_and_login(email, "Passw0rd!123", "Workspace Updater")
+    headers = TestUtils.register_and_login(email, "Passw0rd!123", "Workspace Updater")
 
     response = TestUtils.make_request("POST", "/app/workspace", payload={"name": "Workspace Update"}, headers=headers)
     assert response.status_code == 201
@@ -88,7 +72,7 @@ def test_workspace_update_owner():
 def test_workspace_delete_owner():
     """Owner can delete workspace."""
     email = f"workspace.delete.{uuid4().hex}@test.com"
-    headers = _register_and_login(email, "Passw0rd!123", "Workspace Deleter")
+    headers = TestUtils.register_and_login(email, "Passw0rd!123", "Workspace Deleter")
 
     response = TestUtils.make_request("POST", "/app/workspace", payload={"name": "Workspace Delete"}, headers=headers)
     assert response.status_code == 201
@@ -113,13 +97,13 @@ def test_workspace_delete_owner():
 def test_workspace_access_non_member():
     """Non-members cannot update/delete; list returns empty array."""
     owner_email = f"workspace.owner.{uuid4().hex}@test.com"
-    owner_headers = _register_and_login(owner_email, "Passw0rd!123", "Workspace Owner")
+    owner_headers = TestUtils.register_and_login(owner_email, "Passw0rd!123", "Workspace Owner")
     response = TestUtils.make_request("POST", "/app/workspace", payload={"name": "Workspace Owned"}, headers=owner_headers)
     assert response.status_code == 201
     workspace_key = response.json()["workspace_key"]
 
     other_email = f"workspace.other.{uuid4().hex}@test.com"
-    other_headers = _register_and_login(other_email, "Passw0rd!123", "Workspace Other")
+    other_headers = TestUtils.register_and_login(other_email, "Passw0rd!123", "Workspace Other")
 
     response = TestUtils.make_request("GET", "/app/workspace", headers=other_headers)
     assert response.status_code == 200

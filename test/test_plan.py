@@ -1,5 +1,6 @@
 """Black-box E2E tests for user me resource."""
 from __future__ import annotations
+from uuid import uuid4
 
 from pytest_steps import test_steps
 from sqlalchemy import null
@@ -22,9 +23,8 @@ def test_forbidden_admin_endpoint():
     yield
 
 
-@test_steps("test_invalid_payload","test_create_plan_1", "test_create_plan_2", "test_get_plans")
+@test_steps("test_invalid_payload","test_create_plan_1", "test_create_plan_2", "test_get_plans_admin", "test_get_plans_user")
 def test_plan_create_and_list(admin_headers):
- 
     response = TestUtils.make_request("POST", "/admin/plan", payload={"wrong": "data"}, headers=admin_headers)
     assert response.status_code == 400
     yield
@@ -56,6 +56,16 @@ def test_plan_create_and_list(admin_headers):
     yield
 
     response = TestUtils.make_request("GET", "/admin/plan", headers=admin_headers)
+    assert response.status_code == 200
+    data = response.json()
+    assert isinstance(data, list)
+    assert any(item.get("plan_key") == plan_key1 for item in data)
+    assert any(item.get("plan_key") == plan_key2 for item in data)
+    yield
+
+    email = f"workspace.{uuid4().hex}@test.com"
+    headers = TestUtils.register_and_login(email, "Passw0rd!123", "Workspace Owner")
+    response = TestUtils.make_request("GET", "/app/plan", headers=headers)
     assert response.status_code == 200
     data = response.json()
     assert isinstance(data, list)

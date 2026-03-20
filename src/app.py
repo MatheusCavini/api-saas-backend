@@ -10,7 +10,6 @@ from middlewares.authentication import AuthenticationMiddleware
 from middlewares.logger import Logger
 
 from database.db import SessionLocal
-from resources.admin.plan import AdminPlanResource
 from utils.bracket_formatter import BracketFormatter
 from exception import ClientException, handle_client_error, handle_unexpected_error
 import models
@@ -20,6 +19,8 @@ from resources.health_check import HealthCheckResource
 from resources.auth_resource import AuthResource
 from resources.workspace import WorkspaceResource
 from resources.user import UserResource
+from resources.admin.plan import AdminPlanResource
+from resources.plan import PlanResource
 
 
 
@@ -60,8 +61,13 @@ def create():
     workspace_resource = WorkspaceResource()
     api.add_route("/app/workspace", workspace_resource)
 
-    plan_resource = AdminPlanResource()
-    api.add_route("/admin/plan", plan_resource)
+    admin_plan_resource = AdminPlanResource()
+    api.add_route("/admin/plan", admin_plan_resource)
+
+    plan_resource = PlanResource()
+    api.add_route("/app/plan", plan_resource)
+
+
 
     user_resource = UserResource()
     api.add_route("/app/user/me", user_resource)

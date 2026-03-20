@@ -2,9 +2,11 @@
 import os
 from typing import Any, Optional
 import jwt
-
+from uuid import uuid4
 import requests
 
+os.environ.setdefault("JWT_SECRET", "test-secret")
+os.environ.setdefault("JWT_ALGORITHM", "HS256")
 
 class TestUtils:
     @staticmethod
@@ -26,3 +28,14 @@ class TestUtils:
             os.environ.get("JWT_SECRET", "test-secret"),
             algorithms=[os.environ.get("JWT_ALGORITHM", "HS256")],
         )
+
+    def register_and_login(email: str, password: str, name: str) -> dict:
+        unique_name = f"{name}-{uuid4().hex}"
+        payload = {"name": unique_name, "email": email, "password": password}
+        response = TestUtils.make_request("POST", "/auth/register", payload=payload)
+        assert response.status_code in (201, 409)
+
+        response = TestUtils.make_request("POST", "/auth/login", payload={"email": email, "password": password})
+        assert response.status_code == 200
+        body = response.json()
+        return {"Authorization": f"Bearer {body['access_token']}"}
