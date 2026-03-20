@@ -1,0 +1,22 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "required": ["name", "stripe_price_id", "monthly_quota"],
+    "additionalProperties": false,
+    "properties": {
+      "name": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 255
+      },
+      "stripe_price_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 255
+      },
+      "monthly_quota": {
+        "type": "integer"
+      }
+    }
+  }
+  

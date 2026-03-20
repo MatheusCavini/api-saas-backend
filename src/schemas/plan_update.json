@@ -1,0 +1,26 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "required": ["plan_key"],
+    "additionalProperties": false,
+    "properties": {
+      "plan_key": {
+        "type": "string",
+        "format": "uuid"
+      },
+      "name": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 255
+      },
+      "stripe_price_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 255
+      },
+      "monthly_quota": {
+        "type": "integer"
+      }
+    }
+  }
+  
