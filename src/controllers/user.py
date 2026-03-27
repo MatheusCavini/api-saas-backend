@@ -1,6 +1,8 @@
 import logging
+from datetime import datetime, timezone
 
 from exception import NotAuthorizedException
+from models.subscription import Subscription
 from models.workspace import Workspace
 from models.workspace_member import WorkspaceMember
 from mappers.user import model_to_response as user_to_response
@@ -39,15 +41,17 @@ class UserController:
             ws_payload = workspace_to_response(workspace)
             ws_payload["role"] = membership.role.name if membership.role else None
             
-            # --- SUBSCRIPTION CHECK LOGIC ---
-            # Assuming your Workspace model has a 'subscription' relationship
-            # and that subscription has a 'status' field.
             subscription_status = "inactive"
-            if hasattr(workspace, 'subscription') and workspace.subscription:
-                subscription_status = workspace.subscription.status
-                
-                # Treat 'active' and 'trialing' as valid states to access the dashboard
-                if subscription_status in ["active", "trialing"]:
+            now = datetime.now(timezone.utc)
+            latest_sub = (
+                self.db_session.query(Subscription)
+                .filter(Subscription.workspace_id == workspace.id)
+                .order_by(Subscription.created_at.desc())
+                .first()
+            )
+            if latest_sub:
+                subscription_status = latest_sub.status or "inactive"
+                if subscription_status == "active" and latest_sub.current_period_end and latest_sub.current_period_end > now:
                     has_active_subscription = True
 
             ws_payload["subscription_status"] = subscription_status
