@@ -21,6 +21,7 @@ from resources.workspace import WorkspaceResource
 from resources.user import UserResource
 from resources.admin.plan import AdminPlanResource
 from resources.plan import PlanResource
+from resources.stripe import StripeResource
 
 
 
@@ -66,6 +67,10 @@ def create():
 
     plan_resource = PlanResource()
     api.add_route("/app/plan", plan_resource)
+
+    stripe_resource = StripeResource()
+    api.add_route("/app/stripe/select", stripe_resource, suffix="plan_selection")
+    api.add_route("/app/stripe/webhooks", stripe_resource, suffix="webhook")
 
 
 

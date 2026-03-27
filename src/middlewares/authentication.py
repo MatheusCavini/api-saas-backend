@@ -1,11 +1,13 @@
 import os
 import logging
+import stripe
+from stripe import SignatureVerificationError
 from uuid import UUID
 
 import jwt
 from sqlalchemy.orm import Session
 
-from exception import NotAuthorizedException, ServiceUnavailableException, ForbiddenException
+from exception import NotAuthorizedException, ServiceUnavailableException, ForbiddenException, BadRequestException
 from models.user import User
 
 logger = logging.getLogger(__name__)
@@ -19,6 +21,14 @@ class AuthenticationMiddleware:
         # Public Endpoints
         path = getattr(req, "path", "") or ""
         if path == "/health":
+            return
+
+        # Stripe webhooks (authenticated via Stripe signature)
+        if self._is_stripe_webhook_path(path):
+            payload = req.bounded_stream.read()
+            sig_header = req.get_header("Stripe-Signature")
+            event = self._verify_stripe_signature(payload, sig_header)
+            req.context.stripe_event = event
             return
 
         # Protected Admin endpoints
@@ -109,3 +119,37 @@ class AuthenticationMiddleware:
 
         req.context.user = user
         req.context.user_id = str(user.user_key)
+
+    def _is_stripe_webhook_path(self, path: str) -> bool:
+        return path in ("/app/stripe/webhooks", "app/stripe/webhooks")
+
+    def _verify_stripe_signature(self, payload: bytes, sig_header: str | None):
+        if not sig_header:
+            raise NotAuthorizedException(
+                title="Unauthorized",
+                description="Missing Stripe-Signature header.",
+            )
+
+        secret = os.environ.get("STRIPE_WEBHOOK_SECRET", "").strip()
+        if not secret:
+            raise ServiceUnavailableException(
+                title="Service Unavailable",
+                description="Stripe webhook secret is not configured.",
+            )
+
+        try:
+            event = stripe.Webhook.construct_event(
+                payload, sig_header, secret
+            )
+            return event
+            
+        except ValueError:
+            raise BadRequestException(
+                title="Bad Request",
+                description="Invalid payload.",
+            )
+        except SignatureVerificationError:
+            raise NotAuthorizedException(
+                title="Unauthorized",
+                description="Invalid Stripe signature or webhook is too old.",
+            )
