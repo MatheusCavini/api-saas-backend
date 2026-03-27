@@ -10,6 +10,7 @@ from middlewares.authentication import AuthenticationMiddleware
 from middlewares.logger import Logger
 
 from database.db import SessionLocal
+from resources.api_key import ApiKeyResource
 from utils.bracket_formatter import BracketFormatter
 from exception import ClientException, handle_client_error, handle_unexpected_error
 import models
@@ -72,6 +73,9 @@ def create():
     api.add_route("/app/stripe/select", stripe_resource, suffix="plan_selection")
     api.add_route("/app/stripe/webhooks", stripe_resource, suffix="webhook")
 
+    api_key_resource = ApiKeyResource()
+    api.add_route("/app/api-key", api_key_resource)
+    api.add_route("/app/api-key/{api_key_key}", api_key_resource, suffix="by_key")
 
 
     user_resource = UserResource()

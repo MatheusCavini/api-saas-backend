@@ -44,6 +44,7 @@ class WorkspaceResource:
         workspace_controller = WorkspaceController(req.context.db_session)
         self.logger.info("Processing DELETE request for workspace")
         payload = req.media or {}
+        validate_payload(payload, "workspace_update")
         workspace_key = self._get_workspace_key(req, payload)
         workspace_controller.delete_for_user(req.context.user, workspace_key)
         resp.status = falcon.HTTP_204
