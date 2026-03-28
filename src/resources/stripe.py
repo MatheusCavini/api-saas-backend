@@ -30,6 +30,14 @@ class StripeResource:
         resp.status = falcon.HTTP_200
         resp.media = {"url": checkout_url}
 
+    def on_post_customer_portal(self, req, resp):
+        stripe_controller = StripeController(req.context.db_session)
+        self.logger.info("Processing POST request for Stripe customer portal")
+        payload = req.media or {}
+        checkout_url = stripe_controller.create_customer_portal(req.context.user, payload)
+        resp.status = falcon.HTTP_200
+        resp.media = {"url": checkout_url}
+
     def on_post_webhook(self, req, resp):
         stripe_controller = StripeController(req.context.db_session)
         self.logger.info("Processing Stripe Webhook")

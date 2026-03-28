@@ -72,6 +72,7 @@ def create():
     stripe_resource = StripeResource()
     api.add_route("/app/stripe/select", stripe_resource, suffix="plan_selection")
     api.add_route("/app/stripe/webhooks", stripe_resource, suffix="webhook")
+    api.add_route("/app/stripe/customer-portal", stripe_resource, suffix="customer_portal")
 
     api_key_resource = ApiKeyResource()
     api.add_route("/app/api-key", api_key_resource)

@@ -7,6 +7,9 @@
       "plan_key": {
         "type": "string",
         "format": "uuid"
+      },
+      "locale": {
+        "type":"string"
       }
     }
   }
