@@ -11,7 +11,7 @@ from connectors.redis_connector import get_client
 logger = logging.getLogger(__name__)
 
 RATE_LIMIT_KEY_PREFIX = "rate_limit:"
-RATE_LIMIT_MAX = 100
+RATE_LIMIT_MAX = 200
 RATE_LIMIT_WINDOW_SEC = 60
 SKIP_PATHS = ("/health",)
 

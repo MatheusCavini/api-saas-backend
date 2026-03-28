@@ -17,7 +17,7 @@ def test_health_returns_ok():
 #     total_requests = 0
 #     last_status = 0
 #     last_body = ""
-#     for _ in range(115):
+#     for _ in range(215):
 #         response = TestUtils.make_request("GET", "/api/v1/sample_entities", headers=auth_headers)
 #         last_status = response.status_code
 #         last_body = response.text
@@ -29,5 +29,5 @@ def test_health_returns_ok():
 #         f"Rate limiter falhou após {total_requests} requests. "
 #         f"Último status: {last_status}. Body: {last_body}"
 #     )
-#     assert 99 < total_requests < 110
+#     assert 199 < total_requests < 210
 
