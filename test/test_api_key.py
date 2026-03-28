@@ -40,6 +40,11 @@ def _ensure_active_subscription_for_workspace(workspace_key: str) -> None:
         if plan is None:
             plan = Plan(
                 name="E2E Plan",
+                description="E2E plan for API key tests",
+                price_cents=1000,
+                currency="USD",
+                rate_limit_rpm=60,
+                features=["Feature 1"],
                 monthly_quota=1000,
                 stripe_price_id=f"price_test_{uuid4().hex}",
                 is_active=True,

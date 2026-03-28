@@ -64,6 +64,11 @@ CREATE TABLE plans (
     plan_key UUID UNIQUE NOT NULL DEFAULT uuid_generate_v4(),
     stripe_price_id VARCHAR(255) UNIQUE NOT NULL,
     name VARCHAR(100) NOT NULL,
+    description TEXT NOT NULL,
+    price_cents INT NOT NULL,
+    currency VARCHAR(3) NOT NULL DEFAULT 'USD',
+    rate_limit_rpm INT NOT NULL,
+    features JSONB NOT NULL DEFAULT '[]'::jsonb,
     monthly_quota INT NOT NULL DEFAULT 0,
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP

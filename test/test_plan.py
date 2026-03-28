@@ -31,6 +31,11 @@ def test_plan_create_and_list(admin_headers):
 
     payload = {
         "name": "Test Plan 1",
+        "description": "Brief description for plan 1",
+        "price_cents": 1999,
+        "currency": "USD",
+        "rate_limit_rpm": 60,
+        "features": ["Feature A", "Feature B"],
         "monthly_quota": 100,
         "stripe_price_id": 'abc123'
     }
@@ -38,12 +43,22 @@ def test_plan_create_and_list(admin_headers):
     assert response.status_code == 201
     body = response.json()
     assert body.get("name") == "Test Plan 1"
+    assert body.get("description") == "Brief description for plan 1"
+    assert body.get("price_cents") == 1999
+    assert body.get("currency") == "USD"
+    assert body.get("rate_limit_rpm") == 60
+    assert body.get("features") == ["Feature A", "Feature B"]
     assert body.get("plan_key")
     plan_key1 = body["plan_key"]
     yield
 
     payload = {
         "name": "Pro Plan 2",
+        "description": "Brief description for plan 2",
+        "price_cents": 4999,
+        "currency": "USD",
+        "rate_limit_rpm": 120,
+        "features": ["Pro Feature 1", "Pro Feature 2", "Pro Feature 3"],
         "monthly_quota": 10000,
         "stripe_price_id": 'def456'
     }
@@ -51,6 +66,11 @@ def test_plan_create_and_list(admin_headers):
     assert response.status_code == 201
     body = response.json()
     assert body.get("name") == "Pro Plan 2"
+    assert body.get("description") == "Brief description for plan 2"
+    assert body.get("price_cents") == 4999
+    assert body.get("currency") == "USD"
+    assert body.get("rate_limit_rpm") == 120
+    assert body.get("features") == ["Pro Feature 1", "Pro Feature 2", "Pro Feature 3"]
     assert body.get("plan_key")
     plan_key2 = body["plan_key"]
     yield
@@ -61,6 +81,13 @@ def test_plan_create_and_list(admin_headers):
     assert isinstance(data, list)
     assert any(item.get("plan_key") == plan_key1 for item in data)
     assert any(item.get("plan_key") == plan_key2 for item in data)
+    # Ensure new display fields are returned in admin GET
+    found = next(item for item in data if item.get("plan_key") == plan_key1)
+    assert found.get("description")
+    assert isinstance(found.get("price_cents"), int)
+    assert found.get("currency")
+    assert isinstance(found.get("rate_limit_rpm"), int)
+    assert isinstance(found.get("features"), list)
     yield
 
     email = f"workspace.{uuid4().hex}@test.com"
@@ -71,6 +98,13 @@ def test_plan_create_and_list(admin_headers):
     assert isinstance(data, list)
     assert any(item.get("plan_key") == plan_key1 for item in data)
     assert any(item.get("plan_key") == plan_key2 for item in data)
+    # Ensure new display fields are returned in public GET
+    found = next(item for item in data if item.get("plan_key") == plan_key2)
+    assert found.get("description")
+    assert isinstance(found.get("price_cents"), int)
+    assert found.get("currency")
+    assert isinstance(found.get("rate_limit_rpm"), int)
+    assert isinstance(found.get("features"), list)
     yield
 
 
@@ -78,6 +112,11 @@ def test_plan_create_and_list(admin_headers):
 def test_plan_delete(admin_headers):
     payload = {
         "name": "Enterprise",
+        "description": "Enterprise plan description",
+        "price_cents": 19999,
+        "currency": "USD",
+        "rate_limit_rpm": 600,
+        "features": ["Dedicated support", "SLA", "Custom limits"],
         "monthly_quota": 10000,
         "stripe_price_id": 'ghi789'
     }
@@ -109,6 +148,11 @@ def test_plan_delete(admin_headers):
 def test_plan_update(admin_headers):
     payload = {
         "name": "Old Name",
+        "description": "Old description",
+        "price_cents": 1000,
+        "currency": "USD",
+        "rate_limit_rpm": 10,
+        "features": ["Old Feature"],
         "monthly_quota": 10000,
         "stripe_price_id": 'jkl012'
     }
@@ -124,6 +168,8 @@ def test_plan_update(admin_headers):
     payload = {
         "plan_key": plan_key,
         "name": "New Name",
+        "price_cents": 2500,
+        "features": ["New Feature 1", "New Feature 2"],
         "monthly_quota": 2000
     }
     response = TestUtils.make_request("PUT", "/admin/plan", payload=payload, headers=admin_headers)
@@ -142,5 +188,7 @@ def test_plan_update(admin_headers):
 
     assert updated_plan.get("name") == "New Name"
     assert updated_plan.get("monthly_quota") == 2000
+    assert updated_plan.get("price_cents") == 2500
+    assert updated_plan.get("features") == ["New Feature 1", "New Feature 2"]
     yield
     

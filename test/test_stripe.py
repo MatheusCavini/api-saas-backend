@@ -16,7 +16,12 @@ def test_subscription(admin_headers):
     plan_payload = {
         "name": "E2E Stripe Plan",
         "monthly_quota": 5000,
-        "stripe_price_id": "price_1TF1NO3S9rGghWRUv7Yz2gOM"
+        "stripe_price_id": "price_1TF1NO3S9rGghWRUv7Yz2gOM",
+        "description": "Brief description for plan 1",
+        "price_cents": 1999,
+        "currency": "USD",
+        "rate_limit_rpm": 60,
+        "features": ["Feature A", "Feature B"]
     }
     response = TestUtils.make_request("POST", "/admin/plan", payload=plan_payload, headers=admin_headers)
     assert response.status_code == 201

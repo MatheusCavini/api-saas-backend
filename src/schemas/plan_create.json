@@ -1,7 +1,7 @@
 {
     "$schema": "http://json-schema.org/draft-07/schema#",
     "type": "object",
-    "required": ["name", "stripe_price_id", "monthly_quota"],
+    "required": ["name", "description", "stripe_price_id", "price_cents", "currency", "rate_limit_rpm", "features", "monthly_quota"],
     "additionalProperties": false,
     "properties": {
       "name": {
@@ -9,13 +9,41 @@
         "minLength": 1,
         "maxLength": 255
       },
+      "description": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 2000
+      },
       "stripe_price_id": {
         "type": "string",
         "minLength": 1,
         "maxLength": 255
       },
+      "price_cents": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "currency": {
+        "type": "string",
+        "minLength": 3,
+        "maxLength": 3
+      },
+      "rate_limit_rpm": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "features": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        }
+      },
       "monthly_quota": {
-        "type": "integer"
+        "type": "integer",
+        "minimum": 0
       }
     }
   }
