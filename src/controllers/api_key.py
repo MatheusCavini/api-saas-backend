@@ -118,6 +118,34 @@ class ApiKeyController:
 
         return api_key_to_response(api_key)
 
+    def list_api_keys(self, user) -> list[dict]:
+        if user is None:
+            self.logger.warning("API key list attempted without authenticated user.")
+            raise NotAuthorizedException(
+                title="Unauthorized",
+                description="Authentication is required.",
+            )
+
+        membership = self._get_single_membership_for_user(user)
+        if membership.role.name not in {"owner", "admin"}:
+            self.logger.warning(
+                "API key list forbidden for user_id=%s on workspace_id=%s",
+                user.id,
+                membership.workspace_id,
+            )
+            raise ForbiddenException(
+                title="Forbidden",
+                description="Only workspace owners and admins can view API keys.",
+            )
+
+        api_keys = (
+            self.db_session.query(ApiKey)
+            .filter(ApiKey.workspace_id == membership.workspace_id)
+            .order_by(ApiKey.created_at.desc())
+            .all()
+        )
+        return [api_key_to_response(api_key) for api_key in api_keys]
+
     def delete_api_key(self, user, api_key_key: str) -> None:
         if user is None:
             self.logger.warning("API key delete attempted without authenticated user.")
@@ -236,7 +264,7 @@ class ApiKeyController:
         return f"sk_live_{secrets.token_urlsafe(32)}"
 
     def _prefix_for_display(self, plain_text_key: str) -> str:
-        prefix_len = 10
+        prefix_len = 15
         if len(plain_text_key) <= prefix_len:
             return plain_text_key
         return f"{plain_text_key[:prefix_len]}..."

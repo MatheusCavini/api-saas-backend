@@ -4,7 +4,6 @@ import falcon
 import logging
 
 from controllers.api_key import ApiKeyController
-from exception import BadRequestException
 from utils.validator import validate_payload
 
 
@@ -25,14 +24,13 @@ class ApiKeyResource:
     def on_get(self, req, resp):
         # Optional alias: /app/api-key?api_key_key=...
         api_key_key = req.get_param("api_key_key")
-        if not api_key_key:
-            raise BadRequestException(
-                title="Bad Request",
-                description="api_key_key query param is required.",
-            )
         api_key_controller = ApiKeyController(req.context.db_session)
-        self.logger.info("Processing GET request for api key metadata (query param)")
-        resp.media = api_key_controller.get_api_key(req.context.user, api_key_key)
+        if api_key_key:
+            self.logger.info("Processing GET request for api key metadata (query param)")
+            resp.media = api_key_controller.get_api_key(req.context.user, api_key_key)
+        else:
+            self.logger.info("Processing GET request for api key list")
+            resp.media = api_key_controller.list_api_keys(req.context.user)
         resp.status = falcon.HTTP_200
 
     def on_get_by_key(self, req, resp, api_key_key):

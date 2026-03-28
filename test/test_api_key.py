@@ -141,12 +141,34 @@ def test_api_key_create_and_get_happy_path():
     yield
 
 
-@test_steps("test_get_requires_query_param")
-def test_api_key_get_query_param_requires_key():
-    email = f"api_key.get.missingparam.{uuid4().hex}@test.com"
-    headers = TestUtils.register_and_login(email, "Passw0rd!123", "Missing Param")
+@test_steps("test_get_list_without_query_param")
+def test_api_key_get_list_without_query_param():
+    headers = _register_login_and_create_workspace("api_key.list")
+    ws_resp = TestUtils.make_request("GET", "/app/workspace", headers=headers)
+    assert ws_resp.status_code == 200
+    workspace_key = ws_resp.json()[0]["workspace_key"]
+    _ensure_active_subscription_for_workspace(workspace_key)
+
+    response = TestUtils.make_request("POST", "/app/api-key", payload={}, headers=headers)
+    assert response.status_code == 201
+    api_key_key_1 = response.json()["api_key_key"]
+
+    response = TestUtils.make_request("POST", "/app/api-key", payload={}, headers=headers)
+    assert response.status_code == 201
+    api_key_key_2 = response.json()["api_key_key"]
+
     response = TestUtils.make_request("GET", "/app/api-key", headers=headers)
-    assert response.status_code == 400
+    assert response.status_code == 200
+    body = response.json()
+    assert isinstance(body, list)
+
+    keys = {item.get("api_key_key") for item in body}
+    assert api_key_key_1 in keys
+    assert api_key_key_2 in keys
+
+    for item in body:
+        assert "plain_text_key" not in item
+        assert "key_hash" not in item
     yield
 
 
