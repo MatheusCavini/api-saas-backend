@@ -90,3 +90,23 @@ def test_user_me_with_workspace_no_subscription():
     # Verify the fallback routing logic kicks in
     assert body["routing_state"] == "plan_selection"
     yield
+
+@test_steps("test_register", "test_update_username", "test_get_me")
+def test_update_user():
+    email = f"me.workspace.{uuid4().hex}@test.com"
+    headers = _register_and_login(email, "Passw0rd!123", "Old Username")
+    yield
+
+    payload = {"name": "New Username"}
+    response = TestUtils.make_request("PUT", "/app/user/me", payload=payload, headers=headers)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["username"] == payload.get("name")
+    yield
+
+    response = TestUtils.make_request("GET", "/app/user/me", headers=headers)
+    assert response.status_code == 200
+    body = response.json()
+    assert "user" in body
+    assert body["user"]["username"] == payload.get("name")
+    yield

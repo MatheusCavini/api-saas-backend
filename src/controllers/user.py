@@ -1,13 +1,14 @@
 import logging
 from datetime import datetime, timezone
 
-from exception import NotAuthorizedException
+from exception import NotAuthorizedException, ConflictException
 from models.api_key import ApiKey
 from models.subscription import Subscription
 from models.workspace import Workspace
 from models.workspace_member import WorkspaceMember
 from mappers.user import model_to_response as user_to_response
 from mappers.workspace import model_to_response as workspace_to_response
+from sqlalchemy.exc import IntegrityError
 
 
 class UserController:
@@ -95,3 +96,27 @@ class UserController:
             "workspaces": workspaces_data,
             "routing_state": routing_state
         }
+        
+    def update_me(self, user, payload):
+        if user is None:
+            self.logger.warning("User update requested without authenticated user.")
+            raise NotAuthorizedException(
+                title="Unauthorized",
+                description="Authentication is required.",
+            )
+    
+
+        new_name = payload.get("name")
+
+        user.username = new_name
+        try:
+            self.db_session.commit()
+        except IntegrityError as exc:
+            self.db_session.rollback()
+            self.logger.warning("Registration failed: user already exists")
+            raise ConflictException(
+                title="Conflict",
+                description="A user with this email already exists.",
+            ) from exc
+
+        return user_to_response(user)
