@@ -10,6 +10,8 @@ from models.subscription import Subscription
 from models.role import Role
 from models.api_key import ApiKey
 from models.service import Service
+from models.invitation import Invitation
+from models.invitation_status import InvitationStatus
 
 
 __all__ = [
@@ -21,5 +23,7 @@ __all__ = [
     "Plan",
     "Service",
     "ApiKey",
-    "Role"
+    "Role",
+    "Invitation",
+    "InvitationStatus"
 ]

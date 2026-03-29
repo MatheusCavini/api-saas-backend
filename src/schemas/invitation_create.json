@@ -1,0 +1,24 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["invited_email", "role_key"],
+  "additionalProperties": false,
+  "properties": {
+    "workspace_key": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "invited_email": {
+      "type": "string",
+      "format": "email",
+      "minLength": 3,
+      "maxLength": 255
+    },
+    "role_key": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    }
+  }
+}

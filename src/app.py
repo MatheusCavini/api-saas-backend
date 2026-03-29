@@ -11,6 +11,7 @@ from middlewares.logger import Logger
 
 from database.db import SessionLocal
 from resources.api_key import ApiKeyResource
+from resources.invitation import InvitationResource
 from utils.bracket_formatter import BracketFormatter
 from exception import ClientException, handle_client_error, handle_unexpected_error
 import models
@@ -20,6 +21,7 @@ from resources.health_check import HealthCheckResource
 from resources.auth_resource import AuthResource
 from resources.workspace import WorkspaceResource
 from resources.user import UserResource
+from resources.role import RoleResource
 from resources.admin.plan import AdminPlanResource
 from resources.plan import PlanResource
 from resources.stripe import StripeResource
@@ -69,6 +71,9 @@ def create():
     plan_resource = PlanResource()
     api.add_route("/app/plan", plan_resource)
 
+    role_resource = RoleResource()
+    api.add_route("/app/role", role_resource)
+
     stripe_resource = StripeResource()
     api.add_route("/app/stripe/select", stripe_resource, suffix="plan_selection")
     api.add_route("/app/stripe/webhooks", stripe_resource, suffix="webhook")
@@ -81,6 +86,11 @@ def create():
 
     user_resource = UserResource()
     api.add_route("/app/user/me", user_resource)
+
+    invitation_resource = InvitationResource()
+    api.add_route("/app/invitation", invitation_resource)
+    api.add_route("/app/invitation/accept", invitation_resource, suffix="accept")
+    api.add_route("/app/invitation/refuse", invitation_resource, suffix="refuse")
 
 
     api.add_error_handler(ClientException, handle_client_error)

@@ -153,7 +153,7 @@ class StripeController():
             )
 
         # 3. Get the return URL (where the user goes when they click "Return to App" in Stripe)
-        return_url = os.environ.get("STRIPE_SUCCESS_URL", "").strip()
+        return_url = os.environ.get("STRIPE_RETURN_URL", "").strip()
         
         if not return_url:
             self.logger.error("Stripe portal return URL is not configured.")

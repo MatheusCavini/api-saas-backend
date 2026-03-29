@@ -84,10 +84,37 @@ CREATE TABLE services (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE invitation_status (
+    id SERIAL PRIMARY KEY,
+    status_key UUID UNIQUE NOT NULL DEFAULT uuid_generate_v4(),
+    enum VARCHAR(50) UNIQUE NOT NULL, 
+    description VARCHAR(255),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+INSERT INTO invitation_status (enum, description) VALUES 
+('pending', 'The invitation was created and is waiting for user acceptation.'),
+('accepted', 'Invited user accepted invitation and joined workspace.'),
+('expired', 'Invitation period has expired. Invited user can no longer join workspace using this invitation.'),
+('refused', 'Invited user refused invitation and did not join workspace.'),
+('revoked', 'Host user revoked this invitation.');
+
 -- ==========================================
 -- 3. TABELAS DEPENDENTES (Com Foreign Keys)
 -- ==========================================
 -- IMPORTANTE: Todas as Foreign Keys agora apontam para BIGINT
+
+CREATE TABLE invitations (
+    id SERIAL PRIMARY KEY,
+    invitation_key UUID UNIQUE NOT NULL DEFAULT uuid_generate_v4(),
+    workspace_id INT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    invited_email VARCHAR(255) NOT NULL,
+    host_user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    role_id INT NOT NULL REFERENCES roles(id) ON DELETE RESTRICT, 
+    status_id INT NOT NULL REFERENCES invitation_status(id) ON DELETE RESTRICT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL
+);
 
 CREATE TABLE workspace_members (
     workspace_id INT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,

@@ -3,6 +3,8 @@ from datetime import datetime, timezone
 
 from exception import NotAuthorizedException, ConflictException
 from models.api_key import ApiKey
+from models.invitation import Invitation
+from models.invitation_status import InvitationStatus
 from models.subscription import Subscription
 from models.workspace import Workspace
 from models.workspace_member import WorkspaceMember
@@ -72,15 +74,39 @@ class UserController:
             workspaces_data.append(ws_payload)
 
         # 2. Determine the user's routing state for the frontend
-        # Default to dashboard, then downgrade based on missing requirements
-        routing_state = "dashboard"
-        
-        if not workspaces_data:
-            routing_state = "create_workspace"
-        elif not has_active_subscription:
-            routing_state = "plan_selection"
-        elif not has_active_api_key:
-            routing_state = "api_key_setup"
+        # Check for pending invitation before anything else
+        pending_invitation = (
+            self.db_session.query(Invitation)
+            .join(InvitationStatus)
+            .filter(Invitation.invited_email == user.email)
+            .filter(InvitationStatus.enum == "pending")
+            .first()
+        )
+        pending_invitation_data = None
+
+        if pending_invitation:
+            routing_state = "pending_invitation"
+            
+            # Serialize the invitation data so the frontend can display it
+            pending_invitation_data = {
+                "invitation_key": str(pending_invitation.invitation_key),
+                "invited_email": pending_invitation.invited_email,
+                "host_name": pending_invitation.host_user.username if pending_invitation.host_user else None,
+                "workspace_name": pending_invitation.workspace.name if pending_invitation.workspace else None,
+                "role_name": pending_invitation.role.name if pending_invitation.role else None,
+                "expires_at": pending_invitation.expires_at.isoformat() if pending_invitation.expires_at else None,
+                "status": "pending"
+            }
+        else:
+            # Default to dashboard, then downgrade based on missing requirements
+            routing_state = "dashboard"
+            
+            if not workspaces_data:
+                routing_state = "create_workspace"
+            elif not has_active_subscription:
+                routing_state = "plan_selection"
+            elif not has_active_api_key:
+                routing_state = "api_key_setup"
 
         # 3. Format the final response payload using our new mapper
         user_data = user_to_response(user)
@@ -94,7 +120,8 @@ class UserController:
         return {
             "user": user_data,
             "workspaces": workspaces_data,
-            "routing_state": routing_state
+            "routing_state": routing_state,
+            "pending_invitation": pending_invitation_data
         }
         
     def update_me(self, user, payload):

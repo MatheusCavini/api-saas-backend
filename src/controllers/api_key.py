@@ -105,7 +105,7 @@ class ApiKeyController:
             )
 
         membership = self._get_membership_for_user_and_workspace(user, api_key.workspace_id)
-        if membership.role.name not in {"owner", "admin"}:
+        if membership.role.name not in {"owner", "admin", "member"}:
             self.logger.warning(
                 "API key get forbidden for user_id=%s on workspace_id=%s",
                 user.id,
@@ -127,7 +127,7 @@ class ApiKeyController:
             )
 
         membership = self._get_single_membership_for_user(user)
-        if membership.role.name not in {"owner", "admin"}:
+        if membership.role.name not in {"owner", "admin", "member"}:
             self.logger.warning(
                 "API key list forbidden for user_id=%s on workspace_id=%s",
                 user.id,

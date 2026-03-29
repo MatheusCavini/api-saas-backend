@@ -34,3 +34,4 @@ class User(Base):
     )
 
     workspace_memberships: Mapped[list["WorkspaceMember"]] = relationship(back_populates="user")
+    hosted_invitations: Mapped[list["Invitation"]] = relationship(back_populates="host_user")
