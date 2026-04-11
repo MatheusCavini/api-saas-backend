@@ -64,6 +64,7 @@ def create():
 
     workspace_resource = WorkspaceResource()
     api.add_route("/app/workspace", workspace_resource)
+    api.add_route("/app/workspace/member", workspace_resource, suffix="member")
 
     admin_plan_resource = AdminPlanResource()
     api.add_route("/admin/plan", admin_plan_resource)

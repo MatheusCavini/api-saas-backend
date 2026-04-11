@@ -1,0 +1,20 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["user_key", "role_key"],
+  "additionalProperties": false,
+  "properties": {
+    "workspace_key": {
+      "type": ["string", "null"],
+      "format": "uuid"
+    },
+    "user_key": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "role_key": {
+      "type": "string",
+      "format": "uuid"
+    }
+  }
+}
