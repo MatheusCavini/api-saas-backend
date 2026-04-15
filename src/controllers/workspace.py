@@ -14,8 +14,12 @@ from exception import (
     NotFoundException,
     ServiceUnavailableException,
 )
+from controllers.stripe import StripeController
 from mappers.workspace_member import model_to_response as workspace_member_to_response
 from mappers.workspace import model_to_response as workspace_to_response
+from models.api_key import ApiKey
+from models.invitation import Invitation
+from models.invitation_status import InvitationStatus
 from models.role import Role
 from models.user import User
 from models.workspace import Workspace
@@ -152,14 +156,51 @@ class WorkspaceController():
                 description="Only workspace owners can delete the workspace.",
             )
 
+        workspace_id = membership.workspace_id
+        workspace = membership.workspace
+
         self.logger.info(
-            "Deleting workspace_id=%s for user_id=%s", membership.workspace_id, user.id
+            "Deleting workspace_id=%s for user_id=%s", workspace_id, user.id
         )
-        membership.workspace.deactivated_on = datetime.now(timezone.utc)
-        self.db_session.commit()
+
+        expired_status = self._get_invitation_status_by_enum("expired")
+        pending_status = self._get_invitation_status_by_enum("pending")
+        deleted_at = datetime.now(timezone.utc)
+
+        try:
+            StripeController(self.db_session).cancel_workspace_subscription(workspace_id)
+
+            #Revoke API Keys from that workspace
+            (
+                self.db_session.query(ApiKey)
+                .filter(ApiKey.workspace_id == workspace_id)
+                .filter(ApiKey.status != "revoked")
+                .update({"status": "revoked"}, synchronize_session=False)
+            )
+
+            # Expires (soft delete) invitations from workspace
+            (
+                self.db_session.query(Invitation)
+                .filter(Invitation.workspace_id == workspace_id)
+                .filter(Invitation.status_id == pending_status.id)
+                .update({"status_id": expired_status.id}, synchronize_session=False)
+            )
+
+            workspace.deactivated_on = deleted_at
+            workspace.stripe_customer_id = None
+
+            self.db_session.commit()
+        except Exception:
+            self.db_session.rollback()
+            self.logger.exception(
+                "Workspace deletion failed for workspace_id=%s user_id=%s",
+                workspace_id,
+                user.id,
+            )
+            raise
         self.logger.info(
             "Workspace deactivated workspace_id=%s for user_id=%s",
-            membership.workspace_id,
+            workspace_id,
             user.id,
         )
 
@@ -382,3 +423,16 @@ class WorkspaceController():
                 title="Bad Request",
                 description=f"Invalid {field_name}.",
             ) from exc
+
+    def _get_invitation_status_by_enum(self, enum_value: str) -> InvitationStatus:
+        status = (
+            self.db_session.query(InvitationStatus)
+            .filter(InvitationStatus.enum == enum_value)
+            .first()
+        )
+        if status is None:
+            raise ServiceUnavailableException(
+                title="Service Unavailable",
+                description=f"Invitation status '{enum_value}' is not configured.",
+            )
+        return status

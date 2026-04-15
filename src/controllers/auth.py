@@ -68,6 +68,7 @@ def register_user(session: Session, data: RegisterRequest) -> dict:
         username=data["name"],
         email=data["email"],
         password_hash=password_hash,
+        deactivated_on=None,
     )
     session.add(user)
     try:
@@ -90,7 +91,12 @@ def register_user(session: Session, data: RegisterRequest) -> dict:
 
 
 def login_user(session: Session, data: LoginRequest) -> dict:
-    user = session.query(User).filter(User.email == data["email"]).first()
+    user = (
+        session.query(User)
+        .filter(User.email == data["email"])
+        .filter(User.deactivated_on.is_(None))
+        .first()
+    )
     if not user or not _pwd_context.verify(data["password"], user.password_hash):
         logger.warning("Login failed: invalid credentials")
         raise NotAuthorizedException(
@@ -133,7 +139,12 @@ def google_oauth_login(session: Session, data: OAuthRequest) -> dict:
             description="Google ID token did not contain an email.",
         )
 
-    user = session.query(User).filter(User.email == email).first()
+    user = (
+        session.query(User)
+        .filter(User.email == email)
+        .filter(User.deactivated_on.is_(None))
+        .first()
+    )
     if not user:
         logger.info("Google OAuth: creating new user")
         dummy_password = f"oauth-{uuid4().hex}"
@@ -141,13 +152,19 @@ def google_oauth_login(session: Session, data: OAuthRequest) -> dict:
             username=email,
             email=email,
             password_hash=_pwd_context.hash(dummy_password),
+            deactivated_on=None,
         )
         session.add(user)
         try:
             session.commit()
         except IntegrityError:
             session.rollback()
-            user = session.query(User).filter(User.email == email).first()
+            user = (
+                session.query(User)
+                .filter(User.email == email)
+                .filter(User.deactivated_on.is_(None))
+                .first()
+            )
             if not user:
                 logger.warning("Google OAuth registration failed: user already exists")
                 raise ConflictException(

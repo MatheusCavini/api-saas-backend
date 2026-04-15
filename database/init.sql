@@ -43,7 +43,8 @@ CREATE TABLE users (
     username VARCHAR(255) UNIQUE NOT NULL,
     email VARCHAR(255) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    deactivated_on TIMESTAMP WITH TIME ZONE
 );
 CREATE INDEX idx_users_email ON users(email);
 -- Índice para buscas rápidas da API usando o UUID público

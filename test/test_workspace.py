@@ -2,11 +2,48 @@
 from __future__ import annotations
 
 import os
-from uuid import uuid4
+from unittest.mock import patch
+from uuid import UUID, uuid4
 
+from passlib.context import CryptContext
 from pytest_steps import test_steps
 
+from controllers.workspace import WorkspaceController
+from models.api_key import ApiKey
+from models.subscription import Subscription
+from models.user import User
+from models.workspace import Workspace
+from models.workspace_member import WorkspaceMember
+from test.test_api_key import (
+    _db_session,
+    _ensure_active_subscription_for_workspace,
+)
 from test.utils import TestUtils
+
+_test_key_hasher = CryptContext(schemes=["argon2"], deprecated="auto")
+
+
+def _insert_active_api_key_for_workspace(workspace_key: str) -> None:
+    """Seed an active API key via DB (avoids Stripe on HTTP workspace delete)."""
+    session = _db_session()
+    try:
+        ws = (
+            session.query(Workspace)
+            .filter(Workspace.workspace_key == UUID(workspace_key))
+            .one()
+        )
+        plain = f"test-ws-del-{uuid4().hex}"
+        api_key = ApiKey(
+            workspace_id=ws.id,
+            name="seeded-for-delete-test",
+            key_prefix="sk_test_del",
+            key_hash=_test_key_hasher.hash(plain),
+            status="active",
+        )
+        session.add(api_key)
+        session.commit()
+    finally:
+        session.close()
 
 
 @test_steps("test_create_invalid", "test_create_valid", "test_list_member")
@@ -70,7 +107,7 @@ def test_workspace_update_owner():
 
 @test_steps("test_delete_owner", "test_delete_confirm")
 def test_workspace_delete_owner():
-    """Owner can delete workspace."""
+    """Owner can delete workspace (soft-deactivate, no Stripe subscription to cancel)."""
     email = f"workspace.delete.{uuid4().hex}@test.com"
     headers = TestUtils.register_and_login(email, "Passw0rd!123", "Workspace Deleter")
 
@@ -90,6 +127,23 @@ def test_workspace_delete_owner():
     response = TestUtils.make_request("GET", "/app/workspace", headers=headers)
     assert response.status_code == 200
     assert response.json() == []
+
+    session = _db_session()
+    try:
+        ws = (
+            session.query(Workspace)
+            .filter(Workspace.workspace_key == UUID(workspace_key))
+            .one()
+        )
+        assert ws.deactivated_on is not None
+        member_count = (
+            session.query(WorkspaceMember)
+            .filter(WorkspaceMember.workspace_id == ws.id)
+            .count()
+        )
+        assert member_count == 1
+    finally:
+        session.close()
     yield
 
 
@@ -143,3 +197,131 @@ def test_workspace_unauthorized_requests():
     )
     assert response.status_code == 401
     yield
+
+
+@test_steps("test_delete_revokes_keys_delete", "test_delete_revokes_keys_confirm")
+def test_workspace_delete_revokes_api_keys():
+    """HTTP workspace delete revokes API keys (DB-seeded key; no subscription so Stripe is not called)."""
+    email = f"workspace.del.keys.{uuid4().hex}@test.com"
+    headers = TestUtils.register_and_login(email, "Passw0rd!123", "Workspace Key Deleter")
+
+    response = TestUtils.make_request(
+        "POST",
+        "/app/workspace",
+        payload={"name": "Workspace With Keys"},
+        headers=headers,
+    )
+    assert response.status_code == 201
+    workspace_key = response.json()["workspace_key"]
+
+    _insert_active_api_key_for_workspace(workspace_key)
+
+    response = TestUtils.make_request(
+        "DELETE",
+        "/app/workspace",
+        payload={"workspace_key": workspace_key},
+        headers=headers,
+    )
+    assert response.status_code == 204
+    yield
+
+    response = TestUtils.make_request("GET", "/app/workspace", headers=headers)
+    assert response.status_code == 200
+    assert response.json() == []
+
+    session = _db_session()
+    try:
+        ws = (
+            session.query(Workspace)
+            .filter(Workspace.workspace_key == UUID(workspace_key))
+            .one()
+        )
+        assert ws.deactivated_on is not None
+        keys = session.query(ApiKey).filter(ApiKey.workspace_id == ws.id).all()
+        assert len(keys) >= 1
+        assert all(key.status == "revoked" for key in keys)
+    finally:
+        session.close()
+    yield
+
+
+@patch("controllers.stripe.stripe.Subscription.delete")
+def test_workspace_delete_cancels_stripe_subscription(mock_subscription_delete):
+    """With an active subscription row, delete cancels Stripe and marks the subscription canceled in DB."""
+    prev_stripe_key = os.environ.get("STRIPE_SECRET_KEY")
+    os.environ["STRIPE_SECRET_KEY"] = "sk_test_workspace_delete_e2e"
+
+    email = f"workspace.del.stripe.{uuid4().hex}@test.com"
+    headers = TestUtils.register_and_login(email, "Passw0rd!123", "Workspace Stripe Deleter")
+
+    response = TestUtils.make_request(
+        "POST",
+        "/app/workspace",
+        payload={"name": "Workspace Stripe Delete"},
+        headers=headers,
+    )
+    assert response.status_code == 201
+    workspace_key = response.json()["workspace_key"]
+    _ensure_active_subscription_for_workspace(workspace_key)
+
+    session = _db_session()
+    try:
+        user = session.query(User).filter(User.email == email).one()
+        WorkspaceController(session).delete_for_user(user, workspace_key)
+    finally:
+        session.close()
+
+    if prev_stripe_key is not None:
+        os.environ["STRIPE_SECRET_KEY"] = prev_stripe_key
+    else:
+        os.environ.pop("STRIPE_SECRET_KEY", None)
+
+    mock_subscription_delete.assert_called()
+
+    session = _db_session()
+    try:
+        ws = (
+            session.query(Workspace)
+            .filter(Workspace.workspace_key == UUID(workspace_key))
+            .one()
+        )
+        assert ws.deactivated_on is not None
+        member_count = (
+            session.query(WorkspaceMember)
+            .filter(WorkspaceMember.workspace_id == ws.id)
+            .count()
+        )
+        assert member_count == 1
+        row = (
+            session.query(Subscription)
+            .filter(Subscription.workspace_id == ws.id)
+            .one()
+        )
+        assert row.status == "canceled"
+    finally:
+        session.close()
+
+
+@patch("controllers.stripe.stripe.Subscription.delete")
+def test_workspace_delete_without_subscription_skips_stripe(mock_subscription_delete):
+    """No subscription row means delete does not call Stripe."""
+    email = f"workspace.del.nosub.{uuid4().hex}@test.com"
+    headers = TestUtils.register_and_login(email, "Passw0rd!123", "No Sub Deleter")
+
+    response = TestUtils.make_request(
+        "POST",
+        "/app/workspace",
+        payload={"name": "Workspace No Sub"},
+        headers=headers,
+    )
+    assert response.status_code == 201
+    workspace_key = response.json()["workspace_key"]
+
+    session = _db_session()
+    try:
+        user = session.query(User).filter(User.email == email).one()
+        WorkspaceController(session).delete_for_user(user, workspace_key)
+    finally:
+        session.close()
+
+    mock_subscription_delete.assert_not_called()

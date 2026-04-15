@@ -32,6 +32,10 @@ class User(Base):
         server_default=func.now(),
         nullable=False,
     )
+    deactivated_on: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
 
     workspace_memberships: Mapped[list["WorkspaceMember"]] = relationship(back_populates="user")
     hosted_invitations: Mapped[list["Invitation"]] = relationship(back_populates="host_user")

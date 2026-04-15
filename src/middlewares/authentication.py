@@ -110,7 +110,12 @@ class AuthenticationMiddleware:
                 description="Database session is not available.",
             )
 
-        user = session.query(User).filter(User.user_key == user_key).first()
+        user = (
+            session.query(User)
+            .filter(User.user_key == user_key)
+            .filter(User.deactivated_on.is_(None))
+            .first()
+        )
         if not user:
             raise NotAuthorizedException(
                 title="Unauthorized",

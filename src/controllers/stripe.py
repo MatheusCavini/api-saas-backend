@@ -396,3 +396,62 @@ class StripeController():
             )
 
         return memberships[0]
+
+
+    def cancel_workspace_subscription(self, workspace_id: int) -> None:
+        """
+        Immediately cancels every non-canceled Stripe subscription for a workspace.
+        Called when a workspace is being deleted. Does not commit; the caller
+        should commit the session together with other workspace teardown changes.
+        """
+        subscriptions = (
+            self.db_session.query(Subscription)
+            .filter(Subscription.workspace_id == workspace_id)
+            .filter(Subscription.status != "canceled")
+            .order_by(Subscription.created_at.desc())
+            .all()
+        )
+
+        if not subscriptions:
+            self.logger.info(
+                "No cancellable Stripe subscriptions for workspace_id=%s", workspace_id
+            )
+            return
+
+
+        for subscription in subscriptions:
+            stripe_sub_id = subscription.stripe_sub_id
+            try:
+                stripe.Subscription.delete(stripe_sub_id)
+                self.logger.info(
+                    "Canceled Stripe subscription %s for workspace_id=%s",
+                    stripe_sub_id,
+                    workspace_id,
+                )
+            except stripe.error.InvalidRequestError as exc:
+                if getattr(exc, "code", None) != "resource_missing":
+                    self.logger.exception(
+                        "Failed to cancel Stripe subscription %s for workspace_id=%s",
+                        stripe_sub_id,
+                        workspace_id,
+                    )
+                    raise ServiceUnavailableException(
+                        title="Service Unavailable",
+                        description="Unable to cancel the active subscription. Workspace deletion aborted.",
+                    ) from exc
+                self.logger.info(
+                    "Stripe subscription %s already gone; marking canceled in DB.",
+                    stripe_sub_id,
+                )
+            except Exception as exc:
+                self.logger.exception(
+                    "Failed to cancel Stripe subscription %s for workspace_id=%s",
+                    stripe_sub_id,
+                    workspace_id,
+                )
+                raise ServiceUnavailableException(
+                    title="Service Unavailable",
+                    description="Unable to cancel the active subscription. Workspace deletion aborted.",
+                ) from exc
+
+            subscription.status = "canceled"

@@ -27,3 +27,9 @@ class UserResource:
 
     def on_patch(self, req, resp):
         self.on_put(req, resp)
+
+    def on_delete(self, req, resp):
+        user_controller = UserController(req.context.db_session)
+        self.logger.info("Processing DELETE request for user context (/me)")
+        resp.media = user_controller.delete_me(req.context.user)
+        resp.status = falcon.HTTP_200
