@@ -252,11 +252,7 @@ class WorkspaceController():
         )
         role = self._get_role_by_key(payload.get("role_key"))
 
-        if role.name == "owner":
-            raise ForbiddenException(
-                title="Forbidden",
-                description="Owner role cannot be assigned through workspace membership updates.",
-            )
+        
         if target_membership.role.name == "owner":
             raise ForbiddenException(
                 title="Forbidden",

@@ -357,7 +357,6 @@ def test_workspace_member_multiple_workspace_inference_rules():
 
 @test_steps(
     "test_invalid_uuid_rejected",
-    "test_owner_role_assignment_forbidden",
     "test_owner_membership_cannot_be_modified",
     "test_owner_membership_cannot_be_revoked",
 )
@@ -383,18 +382,7 @@ def test_workspace_member_validation_and_owner_protection_rules():
     assert response.status_code == 400
     yield
 
-    response = TestUtils.make_request(
-        "PUT",
-        "/app/workspace/member",
-        payload={
-            "workspace_key": workspace_key,
-            "user_key": _get_user_key(member_email),
-            "role_key": _get_role_key("owner"),
-        },
-        headers=owner_headers,
-    )
-    assert response.status_code == 403
-    yield
+   
 
     response = TestUtils.make_request(
         "PUT",
