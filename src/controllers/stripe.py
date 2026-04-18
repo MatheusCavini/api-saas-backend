@@ -1,8 +1,7 @@
 import logging
 import os
 import json
-from datetime import datetime, timezone
-from uuid import UUID
+from datetime import datetime, timedelta, timezone
 import stripe
 
 from sqlalchemy.exc import IntegrityError
@@ -35,6 +34,7 @@ class StripeController():
             locale = "pt-BR"
         self.logger.info(f"Locale is set to {locale}")
         stripe_locale = locale if locale in ["en", "pt-BR", "es"] else "auto"
+        
         # 1. Extract plan_id and workspace_id from the payload.
         plan_key = payload.get("plan_key")
 
@@ -52,6 +52,7 @@ class StripeController():
                 title="Not Found",
                 description="Plan not found.",
             )
+
         if not plan:
             self.logger.warning("Plan not found for plan_key=%s", plan_key)
             raise NotFoundException(
@@ -59,7 +60,7 @@ class StripeController():
                 description="Plan not found.",
             )
 
-        # 4. Check user membership inside workspace -> if not Owner, 403 Forbidden.
+        # 3. Check user membership inside workspace -> if not Owner, 403 Forbidden.
         membership = self._get_membership_for_user(user)
 
         if membership.role.name != "owner":
@@ -74,6 +75,10 @@ class StripeController():
             )
 
         workspace_id = membership.workspace_id
+        
+        # Fetch the workspace to check for an existing stripe_customer_id
+        workspace = self.db_session.query(Workspace).filter(Workspace.id == workspace_id).first()
+        
         success_url = os.environ.get("STRIPE_SUCCESS_URL", "").strip()
         cancel_url = os.environ.get("STRIPE_CANCEL_URL", "").strip()
         
@@ -84,25 +89,40 @@ class StripeController():
                 description="Stripe checkout is currently unavailable.",
             )
 
+        # 4. Handle Free Plan Locally
+        if plan.stripe_price_id == "FREE":
+            self.logger.info("Free plan selected. Bypassing Stripe and handling locally.")
+            self._apply_free_plan(workspace_id, plan.id)
+            return success_url
+
+        # 5. Build Checkout Session parameters
+        session_kwargs = {
+            "mode": "subscription",
+            "locale": stripe_locale,
+            "client_reference_id": str(workspace_id),
+            "metadata": {
+                "workspace_id": str(workspace_id),
+                "plan_id": str(plan.id),
+            },
+            "line_items": [
+                {
+                    "price": plan.stripe_price_id,
+                    "quantity": 1,
+                }
+            ],
+            "success_url": success_url,
+            "cancel_url": cancel_url,
+        }
+
+        # Prevent duplicate Stripe customers if they previously paid and downgraded
+        if workspace and not workspace.stripe_customer_id:
+            session_kwargs["customer"] = workspace.stripe_customer_id
+        else:
+            session_kwargs["customer_email"] = user.email
+
+        # 6. Create the Session
         try:
-            session = stripe.checkout.Session.create(
-                mode="subscription",
-                locale=stripe_locale,
-                customer_email=user.email,
-                client_reference_id=str(workspace_id),
-                metadata={
-                    "workspace_id": str(workspace_id),
-                    "plan_id": str(plan.id), # Pass your internal plan ID, it's safer
-                },
-                line_items=[
-                    {
-                        "price": plan.stripe_price_id,
-                        "quantity": 1,
-                    }
-                ],
-                success_url=success_url,
-                cancel_url=cancel_url,
-            )
+            session = stripe.checkout.Session.create(**session_kwargs)
         except Exception as exc:
             self.logger.exception("Stripe checkout session creation failed.")
             raise ServiceUnavailableException(
@@ -143,14 +163,24 @@ class StripeController():
         )
 
         # If they don't have a stripe_customer_id, they haven't checked out yet
+        # 3. Handle Free Users (No Stripe Customer ID)
+        # Instead of a Bad Request, redirect them to the frontend plan selection page.
         if not workspace or not workspace.stripe_customer_id:
-            self.logger.warning(
-                "Stripe customer ID not found for workspace_id=%s", workspace_id
+            self.logger.info(
+                "Stripe customer ID not found for workspace_id=%s. Redirecting to plan selection.", 
+                workspace_id
             )
-            raise BadRequestException(
-                title="Bad Request",
-                description="No active billing account found for this workspace.",
-            )
+            # Make sure to add this environment variable to your .env file!
+            upgrade_url = "http://localhost:3000/onboarding"
+            
+            if not upgrade_url:
+                self.logger.error("FRONTEND_PLAN_SELECTION_URL is not configured.")
+                raise ServiceUnavailableException(
+                    title="Service Unavailable",
+                    description="Plan selection routing is currently unavailable.",
+                )
+            
+            return upgrade_url
 
         # 3. Get the return URL (where the user goes when they click "Return to App" in Stripe)
         return_url = os.environ.get("STRIPE_RETURN_URL", "").strip()
@@ -455,3 +485,44 @@ class StripeController():
                 ) from exc
 
             subscription.status = "canceled"
+
+
+    def _apply_free_plan(self, workspace_id: int, plan_id: int) -> None:
+        """
+        Creates a local-only subscription for the Free plan and marks any 
+        other active subscriptions as canceled.
+        """
+        # Ensure any currently active subscriptions are marked as canceled locally
+        existing_subs = (
+            self.db_session.query(Subscription)
+            .filter(Subscription.workspace_id == workspace_id)
+            .filter(Subscription.status == "active")
+            .all()
+        )
+        
+        for sub in existing_subs:
+            sub.status = "canceled"
+            
+        now = datetime.now(timezone.utc)
+        one_month_from_now = now + timedelta(days=30)
+        # Create the new free subscription (No Stripe ID, No Expiration)
+        free_subscription = Subscription(
+            workspace_id=workspace_id,
+            plan_id=plan_id,
+            stripe_sub_id="FREE_"+str(workspace_id),  # Key indicator of a free plan
+            status="active",
+            current_period_end=one_month_from_now  # Free plans don't expire
+        )
+        
+        self.db_session.add(free_subscription)
+        
+        try:
+            self.db_session.commit()
+            self.logger.info("Successfully applied Free Plan for workspace_id=%s", workspace_id)
+        except IntegrityError as exc:
+            self.db_session.rollback()
+            self.logger.exception("Failed to persist Free Plan for workspace_id=%s", workspace_id)
+            raise ServiceUnavailableException(
+                title="Database Error",
+                description="Unable to apply the free plan."
+            ) from exc
