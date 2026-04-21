@@ -132,6 +132,7 @@ CREATE TABLE subscriptions (
     plan_id INT NOT NULL REFERENCES plans(id) ON DELETE RESTRICT,
     stripe_sub_id VARCHAR(255) UNIQUE NOT NULL,
     status VARCHAR(50) NOT NULL, -- active, past_due, canceled
+    current_period_start TIMESTAMP WITH TIME ZONE NOT NULL,
     current_period_end TIMESTAMP WITH TIME ZONE NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );

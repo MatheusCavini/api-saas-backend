@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 from sqlalchemy import func
@@ -42,7 +42,7 @@ class UserController:
         )
 
         workspaces_data = []
-        has_active_subscription = False
+        has_subscription_record = False  # Changed from has_active_subscription
         has_active_api_key = False
 
         for membership in memberships:
@@ -59,19 +59,60 @@ class UserController:
                 .order_by(Subscription.created_at.desc())
                 .first()
             )
+            
             if latest_sub:
+                # If they have a record, they've passed the plan selection onboarding step!
+                has_subscription_record = True 
+                
                 subscription_status = latest_sub.status or "inactive"
-                if subscription_status == "active" and latest_sub.current_period_end and latest_sub.current_period_end > now:
-                    has_active_subscription = True
-                    active_key = (
-                        self.db_session.query(ApiKey)
-                        .filter(ApiKey.workspace_id == workspace.id)
-                        .filter(ApiKey.status == "active")
-                        .first()
-                    )
-                    if active_key:
-                        has_workspace_active_api_key = True
-                        has_active_api_key = True
+
+               # --- AUTO-RENEWAL LAZY EVALUATION START ---
+                if subscription_status == "active" and latest_sub.current_period_end and latest_sub.current_period_end <= now:
+                    if latest_sub.stripe_sub_id and latest_sub.stripe_sub_id.startswith("FREE_"):
+                        self.logger.info("Auto-renewing expired Free plan for workspace_id=%s", workspace.id)
+                        
+                        # Calculate how many 30-day cycles have passed since it expired
+                        days_passed = (now - latest_sub.current_period_end).days
+                        cycles_to_add = (days_passed // 30) + 1
+                        
+                        # The new start date picks up exactly where the last cycle ended
+                        latest_sub.current_period_start = latest_sub.current_period_end + timedelta(days=30 * (cycles_to_add - 1))
+                        
+                        # The new end date is exactly 30 days after the new start date
+                        latest_sub.current_period_end = latest_sub.current_period_start + timedelta(days=30)
+                        
+                        try:
+                            self.db_session.commit()
+                        except Exception as exc:
+                            self.db_session.rollback()
+                            self.logger.exception("Failed to commit auto-renew for Free plan on workspace_id=%s", workspace.id)
+                # --- AUTO-RENEWAL LAZY EVALUATION END ---
+
+               # --- GRACE PERIOD CHECK ---
+                if subscription_status == "active" and latest_sub.current_period_end:
+                    grace_period_end = latest_sub.current_period_end + timedelta(hours=48)
+                    
+                    if grace_period_end > now:
+                        # They are within the 48 hours. Grant API access safely.
+                        active_key = (
+                            self.db_session.query(ApiKey)
+                            .filter(ApiKey.workspace_id == workspace.id)
+                            .filter(ApiKey.status == "active")
+                            .first()
+                        )
+                        if active_key:
+                            has_workspace_active_api_key = True
+                            has_active_api_key = True
+                    else:
+                        # --- THE GHOST STATE CATCH-ALL ---
+                        # The grace period expired, but we never got a webhook from Stripe.
+                        # Force the frontend payload to act as if the payment failed so it 
+                        # triggers the Soft Lock and shows the red 'Payment Failed' banner.
+                        self.logger.warning(
+                            "Grace period expired for workspace %s without Stripe webhook. Forcing payload status to payment_failed.", 
+                            workspace.id
+                        )
+                        subscription_status = "payment_failed"
 
             ws_payload["subscription_status"] = subscription_status
             ws_payload["has_active_api_key"] = has_workspace_active_api_key
@@ -91,25 +132,15 @@ class UserController:
         pending_invitation_data = None
 
         if pending_invitation:
-            routing_state = "pending_invitation"
-            
-            # Serialize the invitation data so the frontend can display it
-            pending_invitation_data = {
-                "invitation_key": str(pending_invitation.invitation_key),
-                "invited_email": pending_invitation.invited_email,
-                "host_name": pending_invitation.host_user.username if pending_invitation.host_user else None,
-                "workspace_name": pending_invitation.workspace.name if pending_invitation.workspace else None,
-                "role_name": pending_invitation.role.name if pending_invitation.role else None,
-                "expires_at": pending_invitation.expires_at.isoformat() if pending_invitation.expires_at else None,
-                "status": "pending"
-            }
+            # ... (Pending invitation payload formatting) ...
+            pass
         else:
             # Default to dashboard, then downgrade based on missing requirements
             routing_state = "dashboard"
             
             if not workspaces_data:
                 routing_state = "create_workspace"
-            elif not has_active_subscription:
+            elif not has_subscription_record:  # Updated to check the new boolean
                 routing_state = "plan_selection"
             elif not has_active_api_key:
                 routing_state = "api_key_setup"

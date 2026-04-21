@@ -91,7 +91,22 @@ class StripeController():
 
         # 4. Handle Free Plan Locally
         if plan.stripe_price_id == "FREE":
-            self.logger.info("Free plan selected. Bypassing Stripe and handling locally.")
+            # Check if they already have an active paid subscription
+            active_paid_sub = self.db_session.query(Subscription).filter(
+                Subscription.workspace_id == workspace_id,
+                Subscription.status == "active",
+                Subscription.stripe_sub_id.isnot(None), # Exclude free plans
+                ~Subscription.stripe_sub_id.like("FREE_%")
+            ).first()
+
+            if active_paid_sub:
+                self.logger.warning("User attempted to downgrade to Free via checkout.")
+                raise BadRequestException(
+                    title="Invalid Request",
+                    description="To downgrade to the Free plan, please cancel your current subscription in the billing portal."
+                )
+
+            self.logger.info("Free plan selected for new/un-subscribed workspace.")
             self._apply_free_plan(workspace_id, plan.id)
             return success_url
 
@@ -171,7 +186,7 @@ class StripeController():
                 workspace_id
             )
             # Make sure to add this environment variable to your .env file!
-            upgrade_url = "http://localhost:3000/onboarding"
+            upgrade_url = "http://localhost:3000/billing-free-plan"
             
             if not upgrade_url:
                 self.logger.error("FRONTEND_PLAN_SELECTION_URL is not configured.")
@@ -290,12 +305,14 @@ class StripeController():
             self.logger.critical("Stripe subscription has no items for %s", stripe_sub_id)
             return {"status": "error", "message": "Subscription missing items."}
 
+        current_period_start_ts = stripe_subscription["items"].data[0].current_period_start
         current_period_end_ts = stripe_subscription["items"].data[0].current_period_end
         if not current_period_end_ts:
             self.logger.critical("Stripe subscription item missing current_period_end for %s", stripe_sub_id)
             return {"status": "error", "message": "Subscription missing end date."}
 
         current_period_end = datetime.fromtimestamp(current_period_end_ts, tz=timezone.utc)
+        current_period_start = datetime.fromtimestamp(current_period_start_ts, tz=timezone.utc)
 
         subscription = (
             self.db_session.query(Subscription)
@@ -311,6 +328,7 @@ class StripeController():
             subscription.stripe_sub_id = stripe_sub_id
             subscription.status = "active"
             subscription.current_period_end = current_period_end
+            subscription.current_period_start = current_period_start
         else:
             self.logger.info("Creating new subscription for workspace_id=%s", workspace.id)
             subscription = Subscription(
@@ -319,6 +337,7 @@ class StripeController():
                 stripe_sub_id=stripe_sub_id,
                 status="active",
                 current_period_end=current_period_end,
+                current_period_start=current_period_start,
             )
             self.db_session.add(subscription)
         
@@ -341,7 +360,11 @@ class StripeController():
             self.logger.warning("Subscription %s not found in DB during update event.", stripe_sub_id)
             return {"status": "ignored"}
 
-        # 1. Update the period end date
+    
+        # 1. Update the period start and end dates
+        current_period_start_ts = getattr(stripe_subscription, "current_period_start", None)
+        if current_period_start_ts:
+            subscription.current_period_start = datetime.fromtimestamp(current_period_start_ts, tz=timezone.utc)
         current_period_end_ts = getattr(stripe_subscription, "current_period_end", None)
         if current_period_end_ts:
             subscription.current_period_end = datetime.fromtimestamp(current_period_end_ts, tz=timezone.utc)
@@ -381,10 +404,26 @@ class StripeController():
             self.logger.warning("Subscription %s not found in DB during delete event.", stripe_sub_id)
             return {"status": "ignored"}
 
+        # 1. Mark the deleted Stripe subscription as canceled
         subscription.status = "canceled"
-        self.db_session.commit()
+        workspace_id = subscription.workspace_id
         
-        self.logger.info("Subscription %s period ended and was marked as canceled.", stripe_sub_id)
+        # 2. Find the Free Plan in your database
+        free_plan = self.db_session.query(Plan).filter(Plan.stripe_price_id == "FREE").first()
+        
+        # 3. Automatically apply the Free Plan
+        if free_plan:
+            self.logger.info("Stripe subscription %s deleted. Downgrading workspace_id=%s to Free Plan.", stripe_sub_id, workspace_id)
+            
+            # _apply_free_plan handles creating the new sub and calling db_session.commit()
+            self._apply_free_plan(workspace_id, free_plan.id)
+            
+        else:
+            self.logger.critical("Free plan (stripe_price_id='FREE') not found in DB! Could not downgrade workspace_id=%s", workspace_id)
+            # If we couldn't find the free plan, we still need to commit the cancellation of the paid plan
+            self.db_session.commit() 
+            
+        self.logger.info("Subscription %s period ended and fallback logic executed.", stripe_sub_id)
         return {"status": "success"}
 
 
@@ -511,7 +550,8 @@ class StripeController():
             plan_id=plan_id,
             stripe_sub_id="FREE_"+str(workspace_id),  # Key indicator of a free plan
             status="active",
-            current_period_end=one_month_from_now  # Free plans don't expire
+            current_period_end=one_month_from_now,  # Free plans don't expire
+            current_period_start=now
         )
         
         self.db_session.add(free_subscription)

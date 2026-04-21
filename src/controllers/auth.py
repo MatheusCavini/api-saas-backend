@@ -13,6 +13,7 @@ from passlib.context import CryptContext
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from connectors.resend_connector import send_welcome_email
 from exception import ConflictException, NotAuthorizedException, ServiceUnavailableException
 from models.user import User
 from typing import TypedDict
@@ -83,6 +84,7 @@ def register_user(session: Session, data: RegisterRequest) -> dict:
     session.refresh(user)
     logger.info("User registration successful: user_key=%s", user.user_key)
     access_token = create_access_token(user.user_key)
+    send_welcome_email(data["email"] ,data["name"])
     return {
         "access_token": access_token,
         "token_type": "Bearer",

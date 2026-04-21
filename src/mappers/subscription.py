@@ -13,5 +13,6 @@ def model_to_response(model: Subscription) -> dict[str, Any]:
         "stripe_sub_id": model.stripe_sub_id,
         "status": model.status,
         "current_period_end": serialize_dt(model.current_period_end),
+        "current_period_start": serialize_dt(model.current_period_start),
         "created_at": serialize_dt(model.created_at),
     }
