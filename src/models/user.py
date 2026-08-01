@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, Integer, String, func, text
+from sqlalchemy import Boolean, DateTime, Integer, String, func, text
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -36,6 +36,8 @@ class User(Base):
         DateTime(timezone=True),
         nullable=True,
     )
+    is_verified: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    
 
     workspace_memberships: Mapped[list["WorkspaceMember"]] = relationship(back_populates="user")
     hosted_invitations: Mapped[list["Invitation"]] = relationship(back_populates="host_user")

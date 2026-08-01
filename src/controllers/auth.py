@@ -13,7 +13,7 @@ from passlib.context import CryptContext
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from connectors.resend_connector import send_welcome_email
+from connectors.resend_connector import send_verification_email, send_welcome_email
 from exception import ConflictException, NotAuthorizedException, ServiceUnavailableException
 from models.user import User
 from typing import TypedDict
@@ -62,6 +62,18 @@ def create_access_token(user_entity_key: UUID) -> str:
     return token
 
 
+def create_verification_token(user_entity_key: UUID) -> str:
+    """Creates a short-lived token specifically for email verification."""
+    now = datetime.now(timezone.utc)
+    payload = {
+        "sub": str(user_entity_key),
+        "type": "verify_email", # Crucial: Differentiates this from an auth token
+        "iat": now,
+        "exp": now + timedelta(minutes=15), # Short 15-minute TTL
+    }
+    token = jwt.encode(payload, _get_jwt_secret(), algorithm=_get_jwt_algorithm())
+    return token
+
 def register_user(session: Session, data: RegisterRequest) -> dict:
     logger.info("Registering new user")
     password_hash = _pwd_context.hash(data["password"])
@@ -70,6 +82,8 @@ def register_user(session: Session, data: RegisterRequest) -> dict:
         email=data["email"],
         password_hash=password_hash,
         deactivated_on=None,
+        # Ensure you have this column set to False by default on creation
+        is_verified=False 
     )
     session.add(user)
     try:
@@ -83,8 +97,21 @@ def register_user(session: Session, data: RegisterRequest) -> dict:
         ) from exc
     session.refresh(user)
     logger.info("User registration successful: user_key=%s", user.user_key)
+    
+    # 1. Generate normal auth token so they can log in and see the "Waiting Room"
     access_token = create_access_token(user.user_key)
-    send_welcome_email(data["email"] ,data["name"])
+    
+    # 2. Generate the specific verification token
+    verification_token = create_verification_token(user.user_key)
+    
+    # 3. Construct the Magic Link
+    # Best practice: Load the frontend URL from environment variables
+    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+    magic_link = f"{frontend_url}/verify?token={verification_token}"
+    
+    # 4. Send the email (You'll need to update your email function to accept the link)
+    send_verification_email(data["email"], data["name"], magic_link)
+    
     return {
         "access_token": access_token,
         "token_type": "Bearer",

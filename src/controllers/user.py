@@ -131,14 +131,26 @@ class UserController:
         )
         pending_invitation_data = None
 
-        if pending_invitation:
-            # ... (Pending invitation payload formatting) ...
-            pass
+        if pending_invitation and user.is_verified:
+            routing_state = "pending_invitation"
+            
+            # Serialize the invitation data so the frontend can display it
+            pending_invitation_data = {
+                "invitation_key": str(pending_invitation.invitation_key),
+                "invited_email": pending_invitation.invited_email,
+                "host_name": pending_invitation.host_user.username if pending_invitation.host_user else None,
+                "workspace_name": pending_invitation.workspace.name if pending_invitation.workspace else None,
+                "role_name": pending_invitation.role.name if pending_invitation.role else None,
+                "expires_at": pending_invitation.expires_at.isoformat() if pending_invitation.expires_at else None,
+                "status": "pending"
+            }
         else:
             # Default to dashboard, then downgrade based on missing requirements
             routing_state = "dashboard"
-            
-            if not workspaces_data:
+
+            if not user.is_verified:
+                routing_state = "verify_account"
+            elif not workspaces_data:
                 routing_state = "create_workspace"
             elif not has_subscription_record:  # Updated to check the new boolean
                 routing_state = "plan_selection"

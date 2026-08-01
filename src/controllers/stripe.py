@@ -130,7 +130,7 @@ class StripeController():
         }
 
         # Prevent duplicate Stripe customers if they previously paid and downgraded
-        if workspace and not workspace.stripe_customer_id:
+        if workspace and workspace.stripe_customer_id:
             session_kwargs["customer"] = workspace.stripe_customer_id
         else:
             session_kwargs["customer_email"] = user.email
